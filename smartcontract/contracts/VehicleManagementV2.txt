@@ -1,0 +1,149 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "hardhat/console.sol";
+
+contract VehicleManagement {
+    address public owner;
+    uint256 public userCounter;
+    uint256 public vehicleCounter;
+    string[] registerVehicleCounter;
+
+    enum RequestStatus {
+        InProgress,
+        Accepted,
+        Rejected
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    struct User {
+        bool registered;
+    }
+
+    struct Vehicle {
+        string model;
+        string color;
+        string number;
+        string category;
+        string chassisNumber;
+        address owner;
+        RequestStatus status;
+    }
+
+    struct VehicleRequest {
+        string number;
+        string model;
+        string color;
+        string category;
+        string chassisNumber;
+        address requester;
+        RequestStatus status;
+    }
+
+    struct OwnershipRequest {
+        string number;
+        address newOwner;
+        address requester;
+    }
+
+    mapping(address => User) public users;
+    mapping(string => Vehicle) public vehicles;
+    mapping(string => address[]) public ownershipHistory;
+    mapping(string => VehicleRequest) public vehicleRequests;
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only the owner can perform this action");
+        _;
+    }
+
+    modifier onlyRegisteredUser() {
+        require(users[msg.sender].registered, "User is not registered");
+        _;
+    }
+
+    function registerUser() public {
+        require(!users[msg.sender].registered, "User is already registered");
+        users[msg.sender] = User(true);
+        userCounter = userCounter + 1;
+    }
+
+    function requestVehicleRegistration(
+        string memory _number,
+        string memory _model,
+        string memory _color,
+        string memory _category,
+        string memory _chassisNumber
+    ) public onlyRegisteredUser {
+        require(
+            vehicles[_number].owner == address(0),
+            "Vehicle with this number is already registered"
+        );
+
+        Vehicle memory newRequest = Vehicle({
+            number: _number,
+            model: _model,
+            color: _color,
+            category: _category,
+            chassisNumber: _chassisNumber,
+            owner: msg.sender,
+            status: RequestStatus.InProgress
+        });
+        vehicles[_number] = newRequest;
+        vehicleCounter = vehicleCounter + 1;
+        registerVehicleCounter.push(_number);
+    }
+
+    function approveVehicleRegistration(
+        string memory _number
+    ) public onlyOwner {
+        Vehicle storage request = vehicles[_number];
+        require(
+            request.owner != address(0),
+            "No pending request for this vehicle"
+        );
+
+        vehicles[request.number].status = RequestStatus.Accepted;
+    }
+
+    function rejectVehicleRegistration(string memory _number) public onlyOwner {
+        vehicles[_number].status = RequestStatus.Rejected;
+    }
+
+    function getAllVehicles() public view returns (Vehicle[] memory) {
+        Vehicle[] memory allVehicles = new Vehicle[](
+            registerVehicleCounter.length
+        );
+
+        for (uint256 i = 0; i < registerVehicleCounter.length; i++) {
+            string memory requestNumber = registerVehicleCounter[i];
+            Vehicle storage vehicle = vehicles[requestNumber];
+
+            allVehicles[i] = vehicle;
+        }
+
+        return allVehicles;
+    }
+
+    function getOwnershipHistory(
+        string memory _number
+    ) public view returns (address[] memory) {
+        return ownershipHistory[_number];
+    }
+
+    function vehicleOwnershipTransfer(
+        string memory _number,
+        address _newOwner
+    ) public onlyRegisteredUser {
+        Vehicle storage vehicle = vehicles[_number];
+        require(
+            msg.sender == vehicle.owner,
+            "Only the current owner can transfer vehicle ownership"
+        );
+
+        ownershipHistory[_number].push(vehicles[_number].owner);
+        vehicles[_number].owner = _newOwner;
+    }
+}
